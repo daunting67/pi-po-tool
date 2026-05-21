@@ -18,7 +18,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-in-production")
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
 
-GEMINI_API_KEY      = os.getenv("GEMINI_API_KEY", "")
+GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "")
 FASTFIELD_API_KEY   = os.getenv("FASTFIELD_API_KEY", "")
 FASTFIELD_SESSION_TOKEN = os.getenv("FASTFIELD_SESSION_TOKEN", "")
 FASTFIELD_FORM_ID   = os.getenv("FASTFIELD_FORM_ID", "668283")
@@ -100,11 +100,11 @@ def extract_pdf_text(path):
     return "\n\n--- PAGE BREAK ---\n\n".join(pages)
 
 
-# ── Gemini extraction (handles ANY supplier format) ───────────────────────────
+# ── AI extraction — handles ANY supplier format ───────────────────────────────
 
-EXTRACTION_PROMPT = """You are extracting data from a vendor quote or invoice PDF so it can be used to fill a purchase order form.
+EXTRACTION_PROMPT = """You are extracting data from a vendor quote or invoice PDF to fill a purchase order form.
 
-Extract the following fields and return ONLY valid JSON — no markdown, no explanation:
+Return ONLY valid JSON — no markdown, no explanation:
 
 {{
   "vendor_company": "name of the company that issued this quote",
@@ -118,7 +118,7 @@ Extract the following fields and return ONLY valid JSON — no markdown, no expl
     {{
       "description": "full item/service description",
       "unit": "unit of measure (e.g. EA, hr, m, LENGTH)",
-      "quantity": "numeric quantity",
+      "quantity": "numeric quantity only",
       "rate": "unit price as a number only",
       "total": "line total as a number only"
     }}
@@ -127,40 +127,53 @@ Extract the following fields and return ONLY valid JSON — no markdown, no expl
   "other_charges": "freight/delivery/other charges as a number only",
   "gst_amount": "GST amount as a number only",
   "total": "grand total including GST as a number only",
-  "purpose": "1-2 sentence summary of what is being purchased and what project/job it is for"
+  "purpose": "1-2 sentence summary of what is being purchased and what project or job it is for"
 }}
 
 Rules:
 - The CUSTOMER is Pipeline & Infrastructure (P&I) — do NOT put P&I details in vendor fields
 - Use empty string "" for any field not found in the quote
-- Strip all currency symbols ($, NZ$) — numbers only
-- Extract ALL line items, even if there are many
+- Strip all currency symbols — numbers only
+- Extract ALL line items listed
 - For purpose: describe what the items are and mention the project/job name if visible
 
 Quote text:
 {text}"""
 
 
-def parse_with_gemini(text):
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        "gemini-2.0-flash:generateContent"
-        f"?key={GEMINI_API_KEY}"
-    )
-    payload = {
-        "contents": [{"parts": [{"text": EXTRACTION_PROMPT.format(text=text)}]}],
-        "generationConfig": {"temperature": 0},
-    }
-    resp = req.post(url, json=payload, timeout=30)
-    resp.raise_for_status()
-
-    raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+def _parse_ai_response(raw):
+    raw = raw.strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
         raw = raw.rsplit("```", 1)[0]
     return json.loads(raw.strip())
+
+
+def parse_with_groq(text):
+    resp = req.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": "llama-3.3-70b-versatile",
+            "temperature": 0,
+            "max_tokens": 2048,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Extract structured data from vendor quotes. Return only valid JSON, no markdown.",
+                },
+                {"role": "user", "content": EXTRACTION_PROMPT.format(text=text)},
+            ],
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return _parse_ai_response(resp.json()["choices"][0]["message"]["content"])
 
 
 # ── FastField helpers ─────────────────────────────────────────────────────────
@@ -224,10 +237,10 @@ def extract():
         if not text.strip():
             return jsonify({"error": "Could not extract text — the PDF may be a scanned image"}), 400
 
-        if not GEMINI_API_KEY:
-            return jsonify({"error": "GEMINI_API_KEY not set — add it to your .env file"}), 500
+        if not GROQ_API_KEY:
+            return jsonify({"error": "GROQ_API_KEY not set — add it to your .env or Render environment variables"}), 500
 
-        data = parse_with_gemini(text)
+        data = parse_with_groq(text)
         return jsonify({"success": True, "data": data})
 
     except json.JSONDecodeError:
