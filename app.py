@@ -20,6 +20,8 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
 
 GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "")
 FASTFIELD_API_KEY   = os.getenv("FASTFIELD_API_KEY", "")
+FASTFIELD_USERNAME  = os.getenv("FASTFIELD_USERNAME", "")
+FASTFIELD_PASSWORD  = os.getenv("FASTFIELD_PASSWORD", "")
 FASTFIELD_SESSION_TOKEN = os.getenv("FASTFIELD_SESSION_TOKEN", "")
 FASTFIELD_FORM_ID   = os.getenv("FASTFIELD_FORM_ID", "668283")
 FASTFIELD_RECIPIENT_EMAIL = os.getenv("FASTFIELD_RECIPIENT_EMAIL", "")
@@ -152,6 +154,7 @@ def _parse_ai_response(raw):
 
 
 def parse_with_groq(text):
+    text = text[:15000]
     resp = req.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={
@@ -161,7 +164,7 @@ def parse_with_groq(text):
         json={
             "model": "llama-3.3-70b-versatile",
             "temperature": 0,
-            "max_tokens": 2048,
+            "max_tokens": 4096,
             "messages": [
                 {
                     "role": "system",
@@ -181,33 +184,33 @@ def parse_with_groq(text):
 def fastfield_authenticate():
     resp = req.post(
         f"{FASTFIELD_BASE}/authenticate",
-        headers={"FastField-API-Key": FASTFIELD_API_KEY},
+        headers={
+            "FastField-API-Key": FASTFIELD_API_KEY,
+            "Content-Length": "0",
+        },
+        auth=(FASTFIELD_USERNAME, FASTFIELD_PASSWORD),
         timeout=15,
     )
     resp.raise_for_status()
-    return resp.json().get("token", "")
+    return resp.json().get("sessionToken", "")
 
 
 def build_merge_fields(data):
     fields = {
-        "Company Purchased From": data.get("vendor_company", ""),
-        "Contact Person": data.get("vendor_contact", ""),
-        "Address": data.get("vendor_address", ""),
-        "City": data.get("vendor_city", ""),
-        "Phone": data.get("vendor_phone", ""),
-        "Company": data.get("deliver_to_company", ""),
-        "Address.1": data.get("deliver_to_address", ""),
-        "City.1": data.get("deliver_to_city", ""),
-        "Phone.1": data.get("deliver_to_phone", ""),
-        "Attention": data.get("deliver_to_attention", ""),
-        "EXPLAIN WHY THE COMPANY IS PURCHASING THESE ITEMS AND WHAT IS THE PURPOSE?  (Tell us the story of this purchase so the admin team can quickly understand and speed up the monthly approval process without needing to call you.)": data.get("purpose", ""),
-        "Initials": data.get("staff_initials", ""),
-        "P&I STAFF MEMBER NEEDING THIS PURCHASE ORDER": data.get("staff_needing_po", ""),
-        "WHICH JOB IS THE PURCHASE FOR": data.get("job", ""),
-        "CODE": data.get("account_code", ""),
-        "CLIENT": data.get("client", ""),
+        "alpha_9":   data.get("vendor_company", ""),   # Other: Name of Company Not Listed
+        "contact":   data.get("vendor_contact", ""),   # Contact Person
+        "address":   data.get("vendor_address", ""),   # Vendor Address
+        "city":      data.get("vendor_city", ""),      # Vendor City
+        "phone":     data.get("vendor_phone", ""),     # Vendor Phone
+        "company1":  data.get("deliver_to_company", "P&I (North) Ltd"),
+        "address1":  data.get("deliver_to_address", ""),
+        "city1":     data.get("deliver_to_city", ""),
+        "phone1":    data.get("deliver_to_phone", ""),
+        "Att":       data.get("deliver_to_attention", ""),
+        "why":       data.get("purpose", ""),          # Purpose / explanation
+        "alpha_13":  data.get("client", ""),           # Client
     }
-    return [{"fieldName": k, "value": v} for k, v in fields.items() if v]
+    return [{"fieldKey": k, "value": v} for k, v in fields.items() if v]
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -275,16 +278,16 @@ def submit():
     payload = {
         "formId": int(FASTFIELD_FORM_ID),
         "name": dispatch_name,
-        "recipients": [recipient],
+        "recipients": [{"email": recipient}],
         "mergeFields": build_merge_fields(data),
     }
     headers = {
         "Content-Type": "application/json",
-        "FastField-Session-Token": token,
+        "X-Gatekeeper-SessionToken": token,
         "FastField-API-Key": FASTFIELD_API_KEY,
     }
 
-    resp = req.post(f"{FASTFIELD_BASE}/dispatches", headers=headers, json=payload, timeout=15)
+    resp = req.post(f"{FASTFIELD_BASE}/dispatch", headers=headers, json=payload, timeout=15)
 
     if resp.ok:
         return jsonify({"success": True, "dispatch_id": resp.json().get("id")})
