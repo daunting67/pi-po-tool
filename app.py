@@ -210,6 +210,17 @@ def build_merge_fields(data):
         "why":       data.get("purpose", ""),          # Purpose / explanation
         "alpha_13":  data.get("client", ""),           # Client
     }
+    line_items = data.get("line_items", [])
+    if line_items:
+        lines = []
+        for item in line_items:
+            desc = item.get("description", "")
+            qty = item.get("quantity", "")
+            unit = item.get("unit", "")
+            rate = item.get("rate", "")
+            total = item.get("total", "")
+            lines.append(f"{desc} | Qty: {qty} {unit} | Rate: {rate} | Total: {total}")
+        fields["des"] = "\n".join(lines)
     return [{"fieldKey": k, "value": v} for k, v in fields.items() if v]
 
 
