@@ -278,9 +278,9 @@ def submit():
     except Exception as e:
         return jsonify({"error": f"FastField authentication failed: {e}"}), 401
 
-    recipient = data.get("assigned_to") or FASTFIELD_RECIPIENT_EMAIL
+    recipient = data.get("assigned_to", "").strip()
     if not recipient:
-        return jsonify({"error": "No recipient email provided"}), 400
+        return jsonify({"error": "Please enter the FastField email address to assign this PO to"}), 400
 
     vendor = data.get("vendor_company", "Unknown Vendor")
     date = data.get("quote_date", "")

@@ -382,7 +382,7 @@
       <div class="card-body two-col">
         <div class="field">
           <label>Assign To (FastField email)</label>
-          <input type="email" id="assigned_to" placeholder="user@pipelines.nz" />
+          <input type="email" id="assigned_to" placeholder="user@pipelines.nz" required />
         </div>
       </div>
     </div>
@@ -544,6 +544,7 @@
   function submitToFastField() {
     const data = collectFormData();
     if (!data.vendor_company) { showStatus('Please fill in at least the vendor company name.', 'error'); return; }
+    if (!data.assigned_to) { showStatus('Please enter the FastField email address to assign this PO to.', 'error'); document.getElementById('assigned_to').focus(); return; }
     hideStatus();
 
     fetch('/submit', {
