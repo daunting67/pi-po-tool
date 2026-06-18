@@ -286,9 +286,14 @@ def submit():
     date = data.get("quote_date", "")
     dispatch_name = f"PO – {vendor}" + (f" – {date}" if date else "")
 
+    purpose = data.get("purpose", "")
+    ref = data.get("quote_reference", "")
+    description = purpose or (f"Quote ref: {ref}" if ref else dispatch_name)
+
     payload = {
         "formId": int(FASTFIELD_FORM_ID),
         "name": dispatch_name,
+        "description": description,
         "recipients": [{"email": recipient}],
         "mergeFields": build_merge_fields(data),
     }
