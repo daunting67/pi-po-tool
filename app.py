@@ -298,6 +298,7 @@ def submit():
         "FastField-API-Key": FASTFIELD_API_KEY,
     }
 
+    print(f"FastField dispatch payload: {json.dumps(payload)}", flush=True)
     resp = req.post(f"{FASTFIELD_BASE}/dispatch", headers=headers, json=payload, timeout=15)
 
     if resp.ok:
