@@ -301,7 +301,16 @@ def submit():
     resp = req.post(f"{FASTFIELD_BASE}/dispatch", headers=headers, json=payload, timeout=15)
 
     if resp.ok:
-        return jsonify({"success": True, "dispatch_id": resp.json().get("id")})
+        try:
+            rj = resp.json()
+        except Exception:
+            rj = {}
+        print(f"FastField dispatch response: {json.dumps(rj)}", flush=True)
+        dispatch_id = rj.get("id") or rj.get("dispatchId") or rj.get("dispatch_id") or "n/a"
+        if isinstance(dispatch_id, dict):
+            dispatch_id = str(dispatch_id)
+        return jsonify({"success": True, "dispatch_id": dispatch_id, "raw": rj})
+    print(f"FastField dispatch error {resp.status_code}: {resp.text}", flush=True)
     return jsonify({"error": f"FastField error {resp.status_code}: {resp.text}"}), resp.status_code
 
 
