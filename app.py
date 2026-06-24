@@ -221,7 +221,7 @@ def build_merge_fields(data):
             total = item.get("total", "")
             lines.append(f"{desc} | Qty: {qty} {unit} | Rate: {rate} | Total: {total}")
         fields["des"] = "\n".join(lines)
-    return [{"fieldKey": k, "value": v} for k, v in fields.items() if v]
+    return [{"fieldKey": k, "value": str(v) if not isinstance(v, str) else v} for k, v in fields.items() if v]
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
